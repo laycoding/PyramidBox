@@ -297,8 +297,8 @@ class SFD(nn.Module):
 
         if self.phase == "test":
             output = self.detect(
-                loc.view(loc.size(0), -1, 4),                   # loc preds
-                self.softmax(conf.view(conf.size(0), -1, 2)),                         # conf preds
+                loc.view(loc.size(0), -1, 4),                       # loc preds
+                self.softmax(conf.view(conf.size(0), -1, 2)),       # conf preds
                 self.priors.type(type(x.data)).cuda()               # default boxes
             )
         else:
