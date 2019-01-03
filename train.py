@@ -76,7 +76,7 @@ if args.cuda:
 
 
 def xavier(param):
-    init.xavier_uniform(param)
+    init.xavier_uniform_(param)
 
 
 def weights_init(m):
