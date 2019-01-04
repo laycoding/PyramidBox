@@ -14,6 +14,7 @@ from layers import *
 import cv2
 import numpy as np
 import math
+import time
 
 os.environ["CUDA_VISIBLE_DEVICES"]='0'
 torch.cuda.set_device(0)
@@ -32,8 +33,6 @@ def detect_face(image, shrink):
     x = image
     if shrink != 1:
         x = cv2.resize(image, None, None, fx=shrink, fy=shrink, interpolation=cv2.INTER_LINEAR)
-
-
     print('shrink:{}'.format(shrink))
 
     width = x.shape[1]
@@ -41,42 +40,43 @@ def detect_face(image, shrink):
     x = x.astype(np.float32)
     x -= np.array([104, 117, 123],dtype=np.float32)
 
-    x = torch.from_numpy(x).permute(2, 0, 1)
-    x = x.unsqueeze(0)
-    x = Variable(x.cuda(), volatile=True)
+    with torch.no_grad():
+        x = torch.from_numpy(x).permute(2, 0, 1)
+        x = x.unsqueeze(0)
+        x = x.cuda()
 
-    net.priorbox = PriorBoxLayer(width,height)
-    y = net(x)
-    detections = y.data
-    scale = torch.Tensor([width, height, width, height])
+        net.priorbox = PriorBoxLayer(width,height)
+        y = net(x)
+        detections = y.data
+        scale = torch.Tensor([width, height, width, height])
 
-    boxes=[]
-    scores = []
-    for i in range(detections.size(1)):
-        j = 0
-        while detections[0,i,j,0] >= 0.01:
-            score = detections[0,i,j,0]
-            pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
-            boxes.append([pt[0],pt[1],pt[2],pt[3]])
-            scores.append(score)
-            j += 1
-            if j >= detections.size(2):
-                break
+        boxes=[]
+        scores = []
+        for i in range(detections.size(1)):
+            j = 0
+            while detections[0,i,j,0] >= 0.01:
+                score = detections[0,i,j,0]
+                pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
+                boxes.append([pt[0],pt[1],pt[2],pt[3]])
+                scores.append(score)
+                j += 1
+                if j >= detections.size(2):
+                    break
 
-    det_conf = np.array(scores)
-    boxes = np.array(boxes)
+        det_conf = np.array(scores)
+        boxes = np.array(boxes)
 
-    if boxes.shape[0] == 0:
-        return np.array([[0,0,0,0,0.001]])
+        if boxes.shape[0] == 0:
+            return np.array([[0,0,0,0,0.001]])
 
-    det_xmin = boxes[:,0] / shrink
-    det_ymin = boxes[:,1] / shrink
-    det_xmax = boxes[:,2] / shrink
-    det_ymax = boxes[:,3] / shrink
-    det = np.column_stack((det_xmin, det_ymin, det_xmax, det_ymax, det_conf))
+        det_xmin = boxes[:,0] / shrink
+        det_ymin = boxes[:,1] / shrink
+        det_xmax = boxes[:,2] / shrink
+        det_ymax = boxes[:,3] / shrink
+        det = np.column_stack((det_xmin, det_ymin, det_xmax, det_ymax, det_conf))
 
-    keep_index = np.where(det[:, 4] >= 0)[0]
-    det = det[keep_index, :]
+        keep_index = np.where(det[:, 4] >= 0)[0]
+        det = det[keep_index, :]
     return det
 
 
@@ -117,16 +117,13 @@ if __name__ == '__main__':
             Image_Path = Path + str(event[0][0].encode('utf-8'))[2:-1] +'/'+im_name[:] + '.jpg'
             print(Image_Path)
             image = cv2.imread(Image_Path,cv2.IMREAD_COLOR)
-
-            max_im_shrink = (0x7fffffff / 200.0 / (image.shape[0] * image.shape[1])) ** 0.5 # the max size of input image for caffe
-            max_im_shrink = 3 if max_im_shrink > 3 else max_im_shrink
-            
-            shrink = max_im_shrink if max_im_shrink < 1 else 1
-
+            t1 = time.time()
             dets = detect_face(image, 1)  # origin test
-
+            t2 = time.time()
+            print('speed: {:.3f}s / iter'.format(t2-t1))
             f = open(save_path + str(event[0][0].encode('utf-8'))[2:-1]  + '/' + im_name + '.txt', 'w')
             write_to_txt(f, dets)
 
             print('event:%d num:%d' % (index + 1, num + 1))
+            torch.cuda.empty_cache()
 
